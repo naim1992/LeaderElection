@@ -1,26 +1,20 @@
 package upmc.akka.leader
 
-import java.util
 import java.util.Date
 
 import akka.actor._
-
 import akka.util.Timeout
 
-import akka.pattern.{ ask, pipe }
-import scala.concurrent.duration._
-import scala.concurrent.Await
-import scala.util._
-
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import scala.util._
 
 abstract class Tick
 case class CheckerTick () extends Tick
 
 class CheckerActor (val id:Int, val terminaux:List[Terminal], electionActor:ActorRef) extends Actor {
 
-     var time : Int = 200
+     var time : Int = 190
      val father = context.parent
 
      var nodesAlive:List[Int] = List()
@@ -47,8 +41,11 @@ class CheckerActor (val id:Int, val terminaux:List[Terminal], electionActor:Acto
                               case Failure(ex) => this.nodesAlive =  this.nodesAlive.filter(_ != n.id)
                          }
                })
+
              self ! CheckerTick
         }
+
+
 
         // A chaque fois qu'on recoit un Beat : on met a jour la liste des nodes
         case IsAlive (nodeId) => {
@@ -59,7 +56,14 @@ class CheckerActor (val id:Int, val terminaux:List[Terminal], electionActor:Acto
              }
         }
 
-        case IsAliveLeader (nodeId) => this.leader = nodeId
+        case IsAliveLeader (nodeId) =>
+          {
+
+            this.leader = nodeId
+            father ! LeaderChanged(nodeId)
+         //    println("leader : " + leader)
+          }
+
 
         // A chaque fois qu'on recoit un CheckerTick : on verifie qui est mort ou pas
         // Objectif : lancer l'election si le leader est mort
@@ -92,6 +96,8 @@ class CheckerActor (val id:Int, val terminaux:List[Terminal], electionActor:Acto
 
                scheduler.scheduleOnce(time milliseconds , self, CheckerTick) 
         }
+
+
 
     }
 

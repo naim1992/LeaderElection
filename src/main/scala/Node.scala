@@ -1,6 +1,9 @@
 package upmc.akka.leader
 
-import akka.actor._
+import akka.actor.{ActorSelection, Props, _}
+import akka.util.Timeout
+
+import scala.concurrent.duration._
 
 case class Start ()
 
@@ -12,6 +15,8 @@ sealed trait AliveMessage
 case class IsAlive (id:Int) extends AliveMessage
 case class IsAliveLeader (id:Int) extends AliveMessage
 
+
+
 class Node (val id:Int, val terminaux:List[Terminal]) extends Actor {
 
      // Les differents acteurs du systeme
@@ -22,39 +27,58 @@ class Node (val id:Int, val terminaux:List[Terminal]) extends Actor {
 
      var allNodes:List[ActorSelection] = List()
 
+
+     implicit val timeout = Timeout(5 seconds)
+
      def receive = {
 
           // Initialisation
           case Start => {
                displayActor ! Message ("Node " + this.id + " is created")
-               checkerActor ! Start
-               beatActor ! Start
-
                // Initilisation des autres remote, pour communiquer avec eux
                terminaux.foreach(n => {
-                  //  if (n.id != id) {
+
                          val remote = context.actorSelection("akka.tcp://LeaderSystem" + n.id + "@" + n.ip + ":" + n.port + "/user/Node")
-                         // Mise a jour de la liste des nodes
                          this.allNodes = this.allNodes:::List(remote)
-                  //  }
                })
+
+
+
+            checkerActor ! Start
+       //     Thread.sleep(500)
+            beatActor ! Start
+
           }
+
+
 
           // Envoi de messages (format texte)
           case Message (content) => {
                displayActor ! Message (content)
           }
 
-          case BeatLeader (nodeId) => allNodes.foreach(actor => actor ! IsAliveLeader(nodeId))
+          case BeatLeader (nodeId) =>
+            allNodes.foreach(actor => {
+
+                   actor ! IsAliveLeader(nodeId)
+            })
 
           case Beat (nodeId) => {
-               allNodes.foreach(actor => actor ! IsAlive(nodeId))
+               allNodes.foreach(actor => {
+
+                         actor ! IsAlive(nodeId)
+                    })
           }
 
           // Messages venant des autres nodes : pour nous dire qui est encore en vie ou mort
-          case IsAlive (id) => checkerActor ! IsAlive(id)
+          case IsAlive (nodeId) => checkerActor ! IsAlive(nodeId)
 
-          case IsAliveLeader (id) => checkerActor ! IsAliveLeader (id)
+
+          case IsAliveLeader (nodeId) => {
+
+               checkerActor ! IsAliveLeader (nodeId)
+               self ! LeaderChanged(nodeId)
+          }
 
           // Message indiquant que le leader a change
           case LeaderChanged (nodeId) => 
